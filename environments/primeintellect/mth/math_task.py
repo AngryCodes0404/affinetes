@@ -13,7 +13,7 @@ from openai import AsyncOpenAI
 from verifiers.parsers.parser import Parser
 from verifiers.utils.data_utils import extract_boxed_answer
 
-sys.path.insert(0, '/app')
+sys.path.insert(0, "/app")
 from models import Challenge
 
 # We set higher timeouts than default to avoid judge timeout during eval
@@ -134,7 +134,10 @@ class HybridMathRubric(vf.JudgeRubric):
         **kwargs,
     ):
         super().__init__(
-            judge_client=judge_client, judge_sampling_args=judge_sampling_args, judge_prompt=judge_prompt, **kwargs
+            judge_client=judge_client,
+            judge_sampling_args=judge_sampling_args,
+            judge_prompt=judge_prompt,
+            **kwargs,
         )
         # Reward functions
         self.add_reward_func(self.math_verify_score, weight=0)
@@ -142,13 +145,17 @@ class HybridMathRubric(vf.JudgeRubric):
         self.add_reward_func(self.correct_answer, weight=1)
 
         # Parsers for both "rubric" types
-        self.math_verify_parser = math_verify_parser or CustomThinkParser(extract_boxed_answer)
+        self.math_verify_parser = math_verify_parser or CustomThinkParser(
+            extract_boxed_answer
+        )
         self.judge_parser = judge_parser or CustomThinkParser()
 
         # Optional judge model
         self.judge_model = judge_model
 
-    async def math_verify_score(self, completion: vf.Messages, answer: str, state: vf.State, **kwargs) -> float:
+    async def math_verify_score(
+        self, completion: vf.Messages, answer: str, state: vf.State, **kwargs
+    ) -> float:
         """Basic rule-based math verification."""
         response = self.math_verify_parser.parse_answer(completion) or ""
         logger.debug(f"Parsed response for math verification:\n{response}")
@@ -166,7 +173,12 @@ class HybridMathRubric(vf.JudgeRubric):
         return math_verify_score
 
     async def judge_score(
-        self, prompt: vf.Messages, completion: vf.Messages, answer: str, state: vf.State, **kwargs
+        self,
+        prompt: vf.Messages,
+        completion: vf.Messages,
+        answer: str,
+        state: vf.State,
+        **kwargs,
     ) -> float:
         """Calls judge model if math verification did not pass and a judge model is set, else returns math verification score."""
         if state.get("math_verify_score", 0) == 1 or self.judge_model is None:
@@ -177,7 +189,11 @@ class HybridMathRubric(vf.JudgeRubric):
             return 0.0
         logger.debug(f"Parsed response for judge scoring:\n{response}")
         judge_response = await self.judge(prompt, response, answer, state, **kwargs)
-        judge_result = extract_boxed_answer(judge_response) if len(judge_response) != 1 else judge_response
+        judge_result = (
+            extract_boxed_answer(judge_response)
+            if len(judge_response) != 1
+            else judge_response
+        )
         state["judge_result"] = judge_result
         judge_score = 1.0 if judge_result == "A" else 0.0
         state["judge_score"] = judge_score
@@ -186,7 +202,9 @@ class HybridMathRubric(vf.JudgeRubric):
 
     async def correct_answer(self, state: vf.State, **kwargs) -> float:
         """Whether either math verification or judge passed."""
-        return float(state.get("math_verify_score", 0.0) or state.get("judge_score", 0.0))
+        return float(
+            state.get("math_verify_score", 0.0) or state.get("judge_score", 0.0)
+        )
 
 
 INSTRUCTION_PROMPT = "Solve the following math problem. Explain your reasoning and put the final answer in \\boxed{}."
@@ -194,7 +212,7 @@ INSTRUCTION_PROMPT = "Solve the following math problem. Explain your reasoning a
 
 class MathTask:
     """Math task generator and evaluator using INTELLECT-3-RL dataset"""
-    
+
     def __init__(
         self,
         dataset_name: str = "PrimeIntellect/INTELLECT-3-RL",
@@ -211,7 +229,7 @@ class MathTask:
     ):
         """
         Initialize MathTask with dataset and judge configuration
-        
+
         Args:
             dataset_name: HuggingFace dataset name
             dataset_subset: Dataset subset to use
@@ -225,25 +243,36 @@ class MathTask:
             judge_sampling_args: Sampling arguments for judge
             judge_api_key: API key for judge model
         """
-        logger.info(f"Loading dataset: {dataset_name}/{dataset_subset} split={dataset_split}")
-        
+        logger.info(
+            f"Loading dataset: {dataset_name}/{dataset_subset} split={dataset_split}"
+        )
+
         # Load and filter dataset
         self.dataset = (
             load_dataset(dataset_name, dataset_subset, split=dataset_split)
-            .filter(lambda x: min_avg_reward <= x.get(difficulty_key, 0) <= max_avg_reward)
-            .map(lambda x: {"question": INSTRUCTION_PROMPT + "\n\n" + x["question"], "answer": x["answer"]})
+            .filter(
+                lambda x: min_avg_reward <= x.get(difficulty_key, 0) <= max_avg_reward
+            )
+            .map(
+                lambda x: {
+                    "question": INSTRUCTION_PROMPT + "\n\n" + x["question"],
+                    "answer": x["answer"],
+                }
+            )
         )
-        
+
         if dataset_shuffle:
             self.dataset = self.dataset.shuffle(seed=42)
-        
+
         logger.info(f"Dataset loaded: {len(self.dataset)} examples")
-        
+
         # Setup judge client
         api_key = judge_api_key or os.getenv("CHUTES_API_KEY", "EMPTY")
         http_client = httpx.AsyncClient(timeout=HTTPX_TIMEOUT, limits=HTTPX_LIMITS)
-        judge_client = AsyncOpenAI(base_url=judge_base_url, api_key=api_key, http_client=http_client)
-        
+        judge_client = AsyncOpenAI(
+            base_url=judge_base_url, api_key=api_key, http_client=http_client
+        )
+
         # Initialize rubric
         self.rubric = HybridMathRubric(
             judge_model=judge_model,
@@ -251,11 +280,11 @@ class MathTask:
             judge_sampling_args=judge_sampling_args,
             judge_prompt=CV_COT_PROMPT,
         )
-    
+
     async def generate(self, task_id: int = None) -> Challenge:
         """
         Generate a math task challenge
-        
+
         Args:
             task_id: Optional task ID for deterministic selection.
                      If provided, used as index into dataset.
@@ -268,49 +297,52 @@ class MathTask:
         else:
             # Random selection
             import random
+
             idx = random.randint(0, len(self.dataset) - 1)
             sample = self.dataset[idx]
-        
+
         return Challenge(
             env="math",
             prompt=sample["question"],
             extra={
                 "answer": sample["answer"],
                 "task_id": task_id,
-                "dataset_index": idx
-            }
+                "dataset_index": idx,
+            },
         )
-    
+
     async def evaluate(self, response: str, challenge: Challenge) -> float:
         """
         Evaluate math response using HybridMathRubric
-        
+
         Args:
             response: Model response to evaluate
             challenge: Original challenge with answer
-        
+
         Returns:
             Score between 0.0 and 1.0
         """
         answer = challenge.extra.get("answer", "")
-        
+
         # Create messages for rubric evaluation
         prompt_messages = [{"role": "user", "content": challenge.prompt}]
         completion_messages = [{"role": "assistant", "content": response}]
-        
+
         # Evaluate using rubric
         state = vf.State()
-        
+
         try:
             # Run math verification first
             await self.rubric.math_verify_score(completion_messages, answer, state)
-            
+
             # Run judge if needed
-            await self.rubric.judge_score(prompt_messages, completion_messages, answer, state)
-            
+            await self.rubric.judge_score(
+                prompt_messages, completion_messages, answer, state
+            )
+
             # Get final score
             score = await self.rubric.correct_answer(state)
-            
+
             logger.info(f"Evaluation complete: score={score}, state={state}")
             return score
         except Exception as e:
