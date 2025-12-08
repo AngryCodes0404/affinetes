@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
+
 async def main():
     api_key = os.getenv("CHUTES_API_KEY")
     if not api_key:
@@ -17,23 +18,19 @@ async def main():
         sys.exit(1)
 
     image_tag = af.build_image_from_env(
-        env_path="environments/primeintellect/cde",
-        image_tag="code:latest"
+        env_path="environments/primeintellect/cde", image_tag="code:latest"
     )
-    
+
     env = af.load_env(
-        image=image_tag,
-        mode="docker",
-        env_vars={"CHUTES_API_KEY": api_key}
+        image=image_tag, mode="docker", env_vars={"CHUTES_API_KEY": api_key}
     )
 
     result = await env.evaluate(
-        model="deepseek-ai/DeepSeek-V3",
-        base_url="https://llm.chutes.ai/v1",
-        task_id=50
+        model="deepseek-ai/DeepSeek-V3", base_url="https://llm.chutes.ai/v1", task_id=50
     )
-    
+
     print(json.dumps(result, indent=2, ensure_ascii=False))
+
 
 if __name__ == "__main__":
     asyncio.run(main())

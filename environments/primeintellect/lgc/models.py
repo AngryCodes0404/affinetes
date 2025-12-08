@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class Challenge(BaseModel):
     """Challenge specification for evaluation"""
-    
+
     env: str
     prompt: str
     extra: Dict[str, Any] = Field(default_factory=dict)
